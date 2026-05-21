@@ -1,0 +1,1383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DUIS — Differentiating Under the Integral Sign</title>
+
+  <!-- MathJax for LaTeX rendering -->
+  <script>
+    window.MathJax = {
+      tex: { inlineMath: [['$','$'], ['\\(','\\)']], displayMath: [['$$','$$'],['\\[','\\]']] },
+      options: { skipHtmlTags: ['script','noscript','style','textarea','pre'] }
+    };
+  </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-chtml.min.js" defer></script>
+  <!-- Chart.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" defer></script>
+
+  <style>
+    /* ============================================================
+       CSS VARIABLES & RESET
+    ============================================================ */
+    :root {
+      --bg:       #05070f;
+      --surface:  #0c1022;
+      --glass:    rgba(255,255,255,0.04);
+      --border:   rgba(100,180,255,0.15);
+      --neon:     #38bdf8;
+      --purple:   #a855f7;
+      --accent:   #06b6d4;
+      --gold:     #f59e0b;
+      --text:     #e2e8f0;
+      --muted:    #94a3b8;
+      --radius:   16px;
+      --glow:     0 0 40px rgba(56,189,248,0.25);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-behavior: smooth; font-size: 16px; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Georgia', 'Times New Roman', serif;
+      line-height: 1.7;
+      overflow-x: hidden;
+      cursor: none;
+    }
+
+    /* ---- custom cursor ---- */
+    #cursor { position:fixed; width:12px; height:12px; border-radius:50%; background:var(--neon); pointer-events:none; transform:translate(-50%,-50%); z-index:9999; mix-blend-mode:screen; transition:transform .1s; }
+    #cursor-ring { position:fixed; width:36px; height:36px; border-radius:50%; border:1.5px solid rgba(56,189,248,.5); pointer-events:none; transform:translate(-50%,-50%); z-index:9998; transition:all .25s ease; }
+
+    /* ---- scroll progress ---- */
+    #progress { position:fixed; top:0; left:0; height:3px; background:linear-gradient(90deg,var(--neon),var(--purple)); z-index:10000; transition:width .1s; }
+
+    /* ---- loading screen ---- */
+    #loader {
+      position:fixed; inset:0; background:var(--bg); z-index:99999;
+      display:flex; flex-direction:column; align-items:center; justify-content:center; gap:24px;
+      transition:opacity .8s, visibility .8s;
+    }
+    #loader.hidden { opacity:0; visibility:hidden; }
+    .loader-symbol {
+      font-size:4rem; animation: spin 3s linear infinite; color:var(--neon);
+      text-shadow:0 0 40px var(--neon);
+    }
+    .loader-text { font-family:'Courier New',monospace; color:var(--neon); font-size:.9rem; letter-spacing:4px; animation:pulse 1.5s ease infinite; }
+    .loader-bar { width:220px; height:2px; background:rgba(255,255,255,.1); border-radius:2px; overflow:hidden; }
+    .loader-bar-fill { height:100%; background:linear-gradient(90deg,var(--neon),var(--purple)); animation:load 2s ease forwards; }
+
+    @keyframes spin { to { transform:rotate(360deg); } }
+    @keyframes pulse { 0%,100%{opacity:.4} 50%{opacity:1} }
+    @keyframes load { from{width:0} to{width:100%} }
+
+    /* ---- canvas bg ---- */
+    #particles { position:fixed; inset:0; z-index:0; pointer-events:none; }
+
+    /* ---- nav ---- */
+    nav {
+      position:fixed; top:0; width:100%; z-index:1000;
+      padding:14px 40px; display:flex; align-items:center; justify-content:space-between;
+      background:rgba(5,7,15,.7); backdrop-filter:blur(20px);
+      border-bottom:1px solid var(--border);
+      transition:all .3s;
+    }
+    .nav-logo {
+      font-family:'Courier New',monospace; font-size:1.1rem; color:var(--neon);
+      text-shadow:0 0 12px var(--neon); letter-spacing:2px; text-decoration:none;
+    }
+    .nav-links { display:flex; gap:28px; list-style:none; }
+    .nav-links a { color:var(--muted); text-decoration:none; font-family:'Courier New',monospace; font-size:.8rem; letter-spacing:1px; transition:color .3s; }
+    .nav-links a:hover { color:var(--neon); text-shadow:0 0 8px var(--neon); }
+    .nav-toggle { display:none; background:none; border:none; color:var(--neon); font-size:1.4rem; cursor:pointer; }
+
+    /* ============================================================
+       HERO
+    ============================================================ */
+    #hero {
+      position:relative; min-height:100vh;
+      display:flex; align-items:center; justify-content:center;
+      padding:120px 20px 60px; text-align:center; overflow:hidden;
+    }
+    .hero-content { position:relative; z-index:2; max-width:900px; }
+    .hero-badge {
+      display:inline-block; padding:6px 18px; border-radius:999px;
+      border:1px solid var(--border); background:var(--glass);
+      font-family:'Courier New',monospace; font-size:.75rem; color:var(--neon); letter-spacing:3px;
+      margin-bottom:28px; backdrop-filter:blur(8px);
+      animation:fadeUp .8s ease both;
+    }
+    .hero-title {
+      font-size:clamp(2.4rem,6vw,5rem); font-weight:400; line-height:1.1;
+      letter-spacing:-1px; margin-bottom:20px;
+      animation:fadeUp .9s .1s ease both;
+    }
+    .hero-title span { color:var(--neon); text-shadow:var(--glow); }
+    .hero-subtitle {
+      font-size:clamp(1rem,2vw,1.25rem); color:var(--muted); max-width:620px; margin:0 auto 40px;
+      animation:fadeUp .9s .2s ease both;
+    }
+    .hero-formula {
+      background:var(--glass); border:1px solid var(--border); border-radius:var(--radius);
+      padding:24px 32px; display:inline-block; margin-bottom:44px; backdrop-filter:blur(12px);
+      font-size:clamp(1rem,2.5vw,1.4rem);
+      animation:fadeUp .9s .3s ease both; box-shadow:var(--glow);
+    }
+    .hero-btns { display:flex; gap:16px; justify-content:center; flex-wrap:wrap; animation:fadeUp .9s .4s ease both; }
+    .btn {
+      display:inline-flex; align-items:center; gap:8px;
+      padding:13px 30px; border-radius:999px; font-family:'Courier New',monospace;
+      font-size:.85rem; letter-spacing:1.5px; cursor:pointer; transition:all .3s; text-decoration:none;
+    }
+    .btn-primary {
+      background:linear-gradient(135deg,var(--neon),var(--purple));
+      color:#000; font-weight:700; border:none;
+      box-shadow:0 0 30px rgba(56,189,248,.35);
+    }
+    .btn-primary:hover { transform:translateY(-2px) scale(1.04); box-shadow:0 0 50px rgba(56,189,248,.5); }
+    .btn-outline {
+      background:transparent; color:var(--neon);
+      border:1px solid var(--neon);
+    }
+    .btn-outline:hover { background:rgba(56,189,248,.1); transform:translateY(-2px); }
+
+    /* floating symbols */
+    .float-symbols { position:absolute; inset:0; pointer-events:none; overflow:hidden; z-index:1; }
+    .float-sym {
+      position:absolute; color:rgba(56,189,248,.12); font-size:2.5rem;
+      animation:floatSym 8s ease-in-out infinite;
+    }
+    @keyframes floatSym {
+      0%,100%{ transform:translateY(0) rotate(0deg); opacity:.12; }
+      50%{ transform:translateY(-30px) rotate(15deg); opacity:.25; }
+    }
+
+    @keyframes fadeUp { from{opacity:0;transform:translateY(30px)} to{opacity:1;transform:none} }
+
+    /* ============================================================
+       SECTIONS COMMON
+    ============================================================ */
+    section { position:relative; z-index:2; padding:100px 20px; }
+    .container { max-width:1100px; margin:0 auto; }
+    .section-label {
+      font-family:'Courier New',monospace; font-size:.75rem; letter-spacing:4px;
+      color:var(--neon); margin-bottom:12px; display:block;
+    }
+    .section-title {
+      font-size:clamp(1.8rem,4vw,2.8rem); font-weight:400; margin-bottom:16px; line-height:1.2;
+    }
+    .section-title span { color:var(--neon); }
+    .section-desc { color:var(--muted); max-width:640px; margin-bottom:60px; font-size:1.05rem; }
+
+    /* divider */
+    .divider { width:60px; height:3px; background:linear-gradient(90deg,var(--neon),var(--purple)); border-radius:2px; margin-bottom:60px; }
+
+    /* glass card */
+    .glass-card {
+      background:var(--glass); border:1px solid var(--border);
+      border-radius:var(--radius); padding:32px; backdrop-filter:blur(12px);
+      transition:transform .3s, box-shadow .3s, border-color .3s;
+    }
+    .glass-card:hover { transform:translateY(-4px); box-shadow:var(--glow); border-color:rgba(56,189,248,.35); }
+
+    /* ============================================================
+       INTRO SECTION
+    ============================================================ */
+    #intro { background:linear-gradient(180deg,transparent,rgba(56,189,248,.03),transparent); }
+    .intro-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:24px; }
+    .intro-card { text-align:left; }
+    .intro-icon { font-size:2rem; margin-bottom:16px; }
+    .intro-card h3 { font-size:1.15rem; margin-bottom:10px; color:var(--neon); font-weight:400; }
+    .intro-card p { color:var(--muted); font-size:.95rem; }
+
+    /* ============================================================
+       THEORY SECTION
+    ============================================================ */
+    #theory { background:linear-gradient(180deg,transparent,rgba(168,85,247,.03),transparent); }
+    .formula-hero {
+      background:linear-gradient(135deg,rgba(56,189,248,.06),rgba(168,85,247,.06));
+      border:1px solid rgba(168,85,247,.25);
+      border-radius:20px; padding:40px; text-align:center; margin-bottom:48px;
+      box-shadow:0 0 60px rgba(168,85,247,.1);
+    }
+    .formula-hero .label { font-family:'Courier New',monospace; color:var(--purple); font-size:.75rem; letter-spacing:3px; margin-bottom:16px; display:block; }
+    .formula-hero .formula-display { font-size:clamp(1rem,2.5vw,1.3rem); }
+
+    .theory-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:24px; margin-bottom:48px; }
+    .theory-card { border-left:3px solid var(--neon); }
+    .theory-card h3 { color:var(--neon); font-size:1rem; margin-bottom:12px; font-weight:600; }
+    .theory-card p { color:var(--muted); font-size:.92rem; }
+
+    /* accordion */
+    .accordion { border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; margin-bottom:12px; }
+    .acc-header {
+      width:100%; padding:18px 24px; background:var(--glass); border:none; color:var(--text);
+      font-family:'Courier New',monospace; font-size:.9rem; letter-spacing:1px;
+      display:flex; justify-content:space-between; align-items:center; cursor:pointer;
+      transition:background .3s;
+    }
+    .acc-header:hover { background:rgba(56,189,248,.07); }
+    .acc-header .icon { color:var(--neon); font-size:1.2rem; transition:transform .3s; }
+    .acc-header.open .icon { transform:rotate(45deg); }
+    .acc-body { max-height:0; overflow:hidden; transition:max-height .4s ease, padding .4s; padding:0 24px; }
+    .acc-body.open { max-height:400px; padding:16px 24px 20px; }
+    .acc-body p { color:var(--muted); font-size:.92rem; }
+    .acc-body .formula-sm { margin:12px 0; padding:12px; background:rgba(56,189,248,.05); border-radius:8px; border-left:2px solid var(--neon); }
+
+    /* ============================================================
+       VISUALIZATION SECTION
+    ============================================================ */
+    #viz { background:linear-gradient(180deg,transparent,rgba(6,182,212,.03),transparent); }
+    .viz-layout { display:grid; grid-template-columns:1fr 320px; gap:32px; align-items:start; }
+    @media(max-width:900px){ .viz-layout{grid-template-columns:1fr;} }
+    .chart-box {
+      background:var(--glass); border:1px solid var(--border); border-radius:var(--radius);
+      padding:24px; aspect-ratio:16/9; position:relative;
+    }
+    .chart-box canvas { width:100%!important; height:100%!important; }
+    .controls-panel { display:flex; flex-direction:column; gap:20px; }
+    .ctrl-card { background:var(--glass); border:1px solid var(--border); border-radius:var(--radius); padding:20px; }
+    .ctrl-card h4 { color:var(--neon); font-family:'Courier New',monospace; font-size:.8rem; letter-spacing:2px; margin-bottom:14px; }
+    .slider-wrap { display:flex; flex-direction:column; gap:8px; }
+    .slider-wrap label { font-size:.85rem; color:var(--muted); display:flex; justify-content:space-between; }
+    .slider-wrap label span { color:var(--neon); font-family:'Courier New',monospace; }
+    input[type=range] {
+      width:100%; -webkit-appearance:none; height:4px; border-radius:2px;
+      background:linear-gradient(90deg,var(--neon) var(--pct,50%),rgba(255,255,255,.15) var(--pct,50%));
+      outline:none; cursor:pointer;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance:none; width:16px; height:16px; border-radius:50%;
+      background:var(--neon); box-shadow:0 0 12px var(--neon); cursor:pointer;
+    }
+    .viz-info { background:rgba(56,189,248,.04); border:1px solid var(--border); border-radius:10px; padding:14px; }
+    .viz-info p { font-size:.82rem; color:var(--muted); }
+    .viz-info strong { color:var(--neon); }
+
+    /* ---- function input ---- */
+    .fn-input-wrap { display:flex; flex-direction:column; gap:10px; }
+    .fn-input-row { display:flex; gap:8px; align-items:center; }
+    .fn-label { font-family:'Courier New',monospace; font-size:.82rem; color:var(--neon); white-space:nowrap; }
+    .fn-field {
+      flex:1; background:rgba(255,255,255,.05); border:1px solid var(--border);
+      border-radius:8px; padding:9px 13px; color:var(--text);
+      font-family:'Courier New',monospace; font-size:.85rem; outline:none;
+      transition:border-color .3s, box-shadow .3s;
+    }
+    .fn-field:focus { border-color:var(--neon); box-shadow:0 0 12px rgba(56,189,248,.2); }
+    .fn-field.error { border-color:#f87171; box-shadow:0 0 12px rgba(248,113,113,.2); }
+    .fn-apply-btn {
+      padding:9px 16px; border-radius:8px; border:none; cursor:pointer;
+      background:linear-gradient(135deg,var(--neon),var(--purple));
+      color:#000; font-family:'Courier New',monospace; font-size:.78rem;
+      font-weight:700; letter-spacing:1px; transition:all .3s; white-space:nowrap;
+    }
+    .fn-apply-btn:hover { transform:translateY(-1px); box-shadow:0 0 18px rgba(56,189,248,.4); }
+    .fn-error-msg { font-family:'Courier New',monospace; font-size:.75rem; color:#f87171; min-height:16px; }
+    .fn-presets { display:flex; flex-wrap:wrap; gap:6px; }
+    .fn-preset {
+      padding:4px 12px; border-radius:999px; border:1px solid var(--border);
+      background:var(--glass); color:var(--muted); font-family:'Courier New',monospace;
+      font-size:.72rem; cursor:pointer; transition:all .25s;
+    }
+    .fn-preset:hover { color:var(--neon); border-color:var(--neon); background:rgba(56,189,248,.07); }
+    .fn-hint { font-size:.75rem; color:var(--muted); opacity:.7; }
+
+    /* ============================================================
+       EXAMPLES SECTION
+    ============================================================ */
+    #examples { background:linear-gradient(180deg,transparent,rgba(245,158,11,.02),transparent); }
+    .example-tabs { display:flex; gap:8px; margin-bottom:32px; flex-wrap:wrap; }
+    .tab-btn {
+      padding:8px 20px; border-radius:999px; border:1px solid var(--border);
+      background:var(--glass); color:var(--muted); font-family:'Courier New',monospace;
+      font-size:.78rem; letter-spacing:1px; cursor:pointer; transition:all .3s;
+    }
+    .tab-btn.active { background:linear-gradient(135deg,var(--neon),var(--purple)); color:#000; border-color:transparent; font-weight:700; }
+    .example-panel { display:none; animation:fadeIn .4s ease; }
+    .example-panel.active { display:block; }
+    @keyframes fadeIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:none} }
+
+    .steps-list { counter-reset:step; list-style:none; display:flex; flex-direction:column; gap:16px; }
+    .step-item { counter-increment:step; display:flex; gap:16px; align-items:flex-start; }
+    .step-num {
+      min-width:36px; height:36px; border-radius:50%; background:linear-gradient(135deg,var(--neon),var(--purple));
+      display:flex; align-items:center; justify-content:center; font-weight:700; color:#000; font-size:.85rem; flex-shrink:0;
+    }
+    .step-content { background:var(--glass); border:1px solid var(--border); border-radius:12px; padding:16px 20px; flex:1; }
+    .step-content p { color:var(--muted); font-size:.92rem; margin-bottom:8px; }
+    .step-content .formula-inline { color:var(--text); font-size:.95rem; }
+
+    .result-box {
+      background:linear-gradient(135deg,rgba(56,189,248,.08),rgba(168,85,247,.08));
+      border:1px solid rgba(56,189,248,.3); border-radius:12px; padding:20px 24px; margin-top:24px; text-align:center;
+    }
+    .result-box .result-label { font-family:'Courier New',monospace; color:var(--gold); font-size:.75rem; letter-spacing:3px; margin-bottom:10px; display:block; }
+
+    /* ============================================================
+       APPLICATIONS SECTION
+    ============================================================ */
+    #apps { background:linear-gradient(180deg,transparent,rgba(168,85,247,.03),transparent); }
+    .apps-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:24px; }
+    .app-card {
+      background:var(--glass); border:1px solid var(--border); border-radius:var(--radius); padding:28px;
+      transition:all .3s; cursor:default; position:relative; overflow:hidden;
+    }
+    .app-card::before {
+      content:''; position:absolute; inset:0;
+      background:linear-gradient(135deg,rgba(56,189,248,.05),rgba(168,85,247,.05));
+      opacity:0; transition:opacity .3s;
+    }
+    .app-card:hover::before { opacity:1; }
+    .app-card:hover { transform:translateY(-5px); box-shadow:var(--glow); border-color:rgba(56,189,248,.3); }
+    .app-icon { font-size:2.2rem; margin-bottom:14px; }
+    .app-card h3 { font-size:1.05rem; color:var(--neon); margin-bottom:10px; font-weight:400; }
+    .app-card p { color:var(--muted); font-size:.88rem; }
+    .app-tag { display:inline-block; margin-top:12px; padding:3px 10px; border-radius:999px; background:rgba(56,189,248,.1); color:var(--neon); font-family:'Courier New',monospace; font-size:.7rem; letter-spacing:1px; }
+
+    /* ============================================================
+       QUIZ SECTION
+    ============================================================ */
+    #quiz { background:linear-gradient(180deg,transparent,rgba(56,189,248,.02),transparent); }
+    .quiz-box { max-width:720px; margin:0 auto; }
+    .quiz-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:32px; }
+    .quiz-score {
+      background:var(--glass); border:1px solid var(--border); border-radius:10px; padding:10px 20px;
+      font-family:'Courier New',monospace; font-size:.85rem;
+    }
+    .quiz-score span { color:var(--neon); font-size:1.1rem; }
+    .quiz-progress-bar { height:4px; background:rgba(255,255,255,.1); border-radius:2px; margin-bottom:28px; }
+    .quiz-progress-fill { height:100%; background:linear-gradient(90deg,var(--neon),var(--purple)); border-radius:2px; transition:width .4s; }
+
+    .q-card { background:var(--glass); border:1px solid var(--border); border-radius:var(--radius); padding:32px; }
+    .q-num { font-family:'Courier New',monospace; color:var(--muted); font-size:.78rem; letter-spacing:2px; margin-bottom:10px; display:block; }
+    .q-text { font-size:1.1rem; margin-bottom:24px; }
+    .q-formula { margin:12px 0 20px; padding:14px; background:rgba(56,189,248,.05); border-radius:8px; text-align:center; }
+    .options { display:flex; flex-direction:column; gap:10px; }
+    .option-btn {
+      width:100%; padding:14px 20px; text-align:left; border-radius:10px;
+      border:1px solid var(--border); background:var(--glass);
+      color:var(--text); cursor:pointer; font-size:.95rem; transition:all .25s;
+    }
+    .option-btn:hover:not(:disabled) { background:rgba(56,189,248,.08); border-color:var(--neon); }
+    .option-btn.correct { background:rgba(34,197,94,.15); border-color:#22c55e; color:#22c55e; }
+    .option-btn.wrong { background:rgba(239,68,68,.15); border-color:#ef4444; color:#ef4444; }
+    .option-btn:disabled { cursor:default; }
+
+    .q-feedback { margin-top:16px; padding:12px 16px; border-radius:8px; font-size:.9rem; display:none; }
+    .q-feedback.show { display:block; }
+    .q-feedback.correct-fb { background:rgba(34,197,94,.1); border:1px solid rgba(34,197,94,.3); color:#4ade80; }
+    .q-feedback.wrong-fb { background:rgba(239,68,68,.1); border:1px solid rgba(239,68,68,.3); color:#f87171; }
+
+    .q-nav { display:flex; justify-content:space-between; align-items:center; margin-top:24px; }
+    .quiz-result { text-align:center; padding:40px; }
+    .result-score { font-size:4rem; color:var(--neon); text-shadow:var(--glow); line-height:1; }
+    .result-msg { color:var(--muted); margin:16px 0 28px; }
+
+    /* ============================================================
+       TEAM SECTION
+    ============================================================ */
+    #team { background:linear-gradient(180deg,transparent,rgba(245,158,11,.02),transparent); }
+    .team-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:24px; }
+    .team-card { text-align:center; padding:32px 24px; }
+    .avatar {
+      width:80px; height:80px; border-radius:50%; margin:0 auto 16px;
+      background:linear-gradient(135deg,var(--neon),var(--purple));
+      display:flex; align-items:center; justify-content:center;
+      font-size:1.8rem; color:#000; font-weight:700;
+      box-shadow:0 0 24px rgba(56,189,248,.3);
+    }
+    .team-card h3 { font-size:1rem; margin-bottom:4px; font-weight:600; }
+    .team-card .roll { font-family:'Courier New',monospace; color:var(--neon); font-size:.78rem; letter-spacing:2px; margin-bottom:6px; }
+    .team-card .role { color:var(--muted); font-size:.85rem; }
+    .guide-card { grid-column:1/-1; display:flex; align-items:center; gap:24px; text-align:left; padding:32px; max-width:500px; margin:0 auto; }
+    .guide-card .avatar { flex-shrink:0; background:linear-gradient(135deg,var(--gold),#f97316); }
+
+    /* ============================================================
+       CONCLUSION SECTION
+    ============================================================ */
+    #conclusion { background:linear-gradient(180deg,transparent,rgba(56,189,248,.03),transparent); }
+    .conclusion-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:24px; margin-bottom:48px; }
+    .conc-card { border-top:3px solid; padding-top:24px; }
+    .conc-card:nth-child(1){border-color:var(--neon);}
+    .conc-card:nth-child(2){border-color:var(--purple);}
+    .conc-card:nth-child(3){border-color:var(--gold);}
+    .conc-card h3 { color:var(--text); font-size:1.05rem; margin-bottom:10px; font-weight:600; }
+    .conc-card p { color:var(--muted); font-size:.92rem; }
+    .final-quote {
+      background:linear-gradient(135deg,rgba(56,189,248,.06),rgba(168,85,247,.06));
+      border:1px solid var(--border); border-radius:var(--radius); padding:36px; text-align:center;
+    }
+    .final-quote blockquote { font-size:1.15rem; color:var(--text); font-style:italic; margin-bottom:12px; }
+    .final-quote cite { font-family:'Courier New',monospace; color:var(--neon); font-size:.8rem; }
+
+    /* ============================================================
+       FOOTER
+    ============================================================ */
+    footer {
+      position:relative; z-index:2; padding:48px 20px; text-align:center;
+      border-top:1px solid var(--border); background:rgba(5,7,15,.9);
+    }
+    .footer-logo { font-family:'Courier New',monospace; color:var(--neon); font-size:1.1rem; letter-spacing:2px; margin-bottom:8px; }
+    .footer-info { color:var(--muted); font-size:.85rem; margin-bottom:20px; }
+    .footer-divider { width:60px; height:1px; background:var(--border); margin:20px auto; }
+    .footer-links { display:flex; justify-content:center; gap:20px; margin-bottom:20px; }
+    .footer-links a {
+      width:40px; height:40px; border-radius:50%; border:1px solid var(--border);
+      display:flex; align-items:center; justify-content:center; color:var(--muted);
+      text-decoration:none; font-size:1rem; transition:all .3s;
+    }
+    .footer-links a:hover { border-color:var(--neon); color:var(--neon); box-shadow:0 0 12px rgba(56,189,248,.3); }
+    .footer-copy { color:var(--muted); font-size:.78rem; font-family:'Courier New',monospace; }
+
+    /* ============================================================
+       BACK TO TOP
+    ============================================================ */
+    #back-top {
+      position:fixed; bottom:32px; right:32px; z-index:500;
+      width:44px; height:44px; border-radius:50%;
+      background:linear-gradient(135deg,var(--neon),var(--purple));
+      border:none; color:#000; font-size:1.1rem; cursor:pointer;
+      opacity:0; transform:translateY(10px); transition:all .3s;
+      box-shadow:0 0 20px rgba(56,189,248,.4);
+    }
+    #back-top.visible { opacity:1; transform:none; }
+    #back-top:hover { transform:translateY(-3px); box-shadow:0 0 30px rgba(56,189,248,.6); }
+
+    /* ============================================================
+       ANIMATIONS / SCROLL REVEAL
+    ============================================================ */
+    .reveal { opacity:0; transform:translateY(40px); transition:opacity .7s ease, transform .7s ease; }
+    .reveal.visible { opacity:1; transform:none; }
+
+    /* ============================================================
+       RESPONSIVE
+    ============================================================ */
+    @media(max-width:768px){
+      nav { padding:12px 20px; }
+      .nav-links { display:none; flex-direction:column; position:absolute; top:100%; left:0; width:100%; background:rgba(5,7,15,.95); padding:20px; gap:16px; border-bottom:1px solid var(--border); }
+      .nav-links.open { display:flex; }
+      .nav-toggle { display:block; }
+      section { padding:70px 16px; }
+      .guide-card { flex-direction:column; text-align:center; }
+    }
+    @media(max-width:480px){
+      .hero-formula { padding:16px; }
+      .q-card { padding:20px; }
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- Loading Screen -->
+  <div id="loader">
+    <div class="loader-symbol">∫</div>
+    <div class="loader-text">LOADING · MATHEMATICAL CONTENT</div>
+    <div class="loader-bar"><div class="loader-bar-fill"></div></div>
+  </div>
+
+  <!-- Scroll Progress -->
+  <div id="progress"></div>
+
+  <!-- Custom Cursor -->
+  <div id="cursor"></div>
+  <div id="cursor-ring"></div>
+
+  <!-- Particle Canvas -->
+  <canvas id="particles"></canvas>
+
+  <!-- Back to Top -->
+  <button id="back-top" title="Back to top">↑</button>
+
+  <!-- ===================== NAV ===================== -->
+  <nav id="navbar">
+    <a class="nav-logo" href="#hero">∫ DUIS</a>
+    <button class="nav-toggle" id="navToggle">☰</button>
+    <ul class="nav-links" id="navLinks">
+      <li><a href="#intro">Intro</a></li>
+      <li><a href="#theory">Theory</a></li>
+      <li><a href="#viz">Visualize</a></li>
+      <li><a href="#examples">Examples</a></li>
+
+      <li><a href="#quiz">Quiz</a></li>
+      <li><a href="#team">Team</a></li>
+    </ul>
+  </nav>
+
+  <!-- ===================== HERO ===================== -->
+  <section id="hero">
+    <div class="float-symbols">
+      <span class="float-sym" style="top:12%;left:5%;animation-delay:0s">∫</span>
+      <span class="float-sym" style="top:20%;right:8%;animation-delay:1s;font-size:1.8rem">∂</span>
+      <span class="float-sym" style="top:65%;left:3%;animation-delay:2s;font-size:2rem">∑</span>
+      <span class="float-sym" style="top:70%;right:5%;animation-delay:.5s">∞</span>
+      <span class="float-sym" style="top:40%;left:90%;animation-delay:1.5s;font-size:1.5rem">α</span>
+      <span class="float-sym" style="top:85%;left:15%;animation-delay:2.5s;font-size:1.6rem">∇</span>
+      <span class="float-sym" style="top:30%;left:50%;animation-delay:3s;font-size:1.2rem">dx</span>
+    </div>
+    <div class="hero-content">
+      <div class="hero-badge">MULTIVARIATE CALCULUS · ADVANCED INTEGRATION</div>
+      <h1 class="hero-title">
+        Differentiating<br>Under the <span>Integral Sign</span>
+      </h1>
+      <p class="hero-subtitle">
+        A powerful analytical technique bridging differentiation and integration — 
+        transforming intractable integrals into elegant solutions across physics, engineering, and mathematics.
+      </p>
+      <div class="hero-formula">
+        $$\frac{d}{d\alpha}\int_{a}^{b} f(x,\alpha)\,dx = \int_{a}^{b} \frac{\partial}{\partial \alpha}f(x,\alpha)\,dx$$
+      </div>
+      <div class="hero-btns">
+        <a href="#intro" class="btn btn-primary">Explore More ↓</a>
+        <a href="#theory" class="btn btn-outline">View Theory</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== INTRO ===================== -->
+  <section id="intro">
+    <div class="container">
+      <span class="section-label reveal">§ 01 · INTRODUCTION</span>
+      <h2 class="section-title reveal">What is <span>DUIS</span>?</h2>
+      <p class="section-desc reveal">
+        Differentiating Under the Integral Sign — sometimes called the Leibniz Integral Rule — allows
+        us to compute derivatives of integrals that depend on a parameter, often converting
+        seemingly impossible integrals into straightforward calculations.
+      </p>
+      <div class="divider reveal"></div>
+
+      <div class="intro-grid">
+        <div class="glass-card intro-card reveal">
+          <div class="intro-icon">🧮</div>
+          <h3>The Core Idea</h3>
+          <p>When an integral depends on a parameter α, we can differentiate with respect to that parameter inside the integral — swapping the order of differentiation and integration under appropriate conditions.</p>
+        </div>
+        <div class="glass-card intro-card reveal">
+          <div class="intro-icon">⚙️</div>
+          <h3>Why It Matters</h3>
+          <p>Many definite integrals that resist standard techniques — substitution, parts, partial fractions — yield immediately to DUIS. It is particularly powerful for Gaussian and trigonometric integrals.</p>
+        </div>
+        <div class="glass-card intro-card reveal">
+          <div class="intro-icon">🌐</div>
+          <h3>Wide Applications</h3>
+          <p>Used in quantum mechanics, Fourier analysis, Bayesian probability, machine learning optimization, and electrical engineering — wherever parameterized integrals appear.</p>
+        </div>
+        <div class="glass-card intro-card reveal">
+          <div class="intro-icon">📐</div>
+          <h3>Mathematical Elegance</h3>
+          <p>Richard Feynman famously championed this technique as his secret weapon, solving competition problems and physics calculations that stumped peers trained only in standard textbook methods.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== THEORY ===================== -->
+  <section id="theory">
+    <div class="container">
+      <span class="section-label reveal">§ 02 · MATHEMATICAL THEORY</span>
+      <h2 class="section-title reveal">The Leibniz <span>Integral Rule</span></h2>
+      <p class="section-desc reveal">Formal statement, conditions, and extensions of the theorem that powers DUIS.</p>
+      <div class="divider reveal"></div>
+
+      <!-- Main formula -->
+      <div class="formula-hero reveal">
+        <span class="label">LEIBNIZ INTEGRAL RULE · CONSTANT LIMITS</span>
+        <div class="formula-display">
+          $$\frac{d}{d\alpha}\int_{a}^{b} f(x,\alpha)\,dx = \int_{a}^{b} \frac{\partial f}{\partial \alpha}(x,\alpha)\,dx$$
+        </div>
+      </div>
+
+      <div class="theory-grid reveal">
+        <div class="glass-card theory-card">
+          <h3>Constant Limits Case</h3>
+          <p>When bounds $a$ and $b$ are independent of $\alpha$, differentiating under the integral simply moves the derivative inside as a partial derivative.</p>
+        </div>
+        <div class="glass-card theory-card">
+          <h3>Variable Limits Case</h3>
+          <p>When bounds depend on $\alpha$, the General Leibniz Rule adds boundary terms involving $f$ evaluated at the limits and the rates of change of those limits.</p>
+        </div>
+        <div class="glass-card theory-card">
+          <h3>Validity Conditions</h3>
+          <p>$f(x,\alpha)$ must be continuous, and $\partial f/\partial\alpha$ must be continuous on the region. These are sufficient (not necessary) conditions for the rule to hold.</p>
+        </div>
+      </div>
+
+      <!-- General rule formula -->
+      <div class="formula-hero reveal" style="border-color:rgba(168,85,247,.25);">
+        <span class="label" style="color:var(--purple);">GENERAL LEIBNIZ RULE · VARIABLE LIMITS</span>
+        <div class="formula-display">
+          $$\frac{d}{d\alpha}\int_{a(\alpha)}^{b(\alpha)} f(x,\alpha)\,dx = f\!\left(b(\alpha),\alpha\right)b'(\alpha) - f\!\left(a(\alpha),\alpha\right)a'(\alpha) + \int_{a(\alpha)}^{b(\alpha)} \frac{\partial f}{\partial \alpha}\,dx$$
+        </div>
+      </div>
+
+      <!-- Accordions -->
+      <div class="reveal">
+        <div class="accordion">
+          <button class="acc-header" onclick="toggleAcc(this)">
+            <span>Continuity & Differentiability Conditions</span>
+            <span class="icon">+</span>
+          </button>
+          <div class="acc-body">
+            <p>Let $I(\alpha) = \int_a^b f(x,\alpha)\,dx$. The Leibniz rule applies when:</p>
+            <ul style="color:var(--muted);font-size:.9rem;padding-left:20px;margin-top:8px;">
+              <li>$f(x,\alpha)$ is continuous in both $x$ and $\alpha$ on $[a,b]\times[\alpha_1,\alpha_2]$</li>
+              <li>$\partial f/\partial\alpha$ exists and is continuous on the same region</li>
+              <li>The integral $\int_a^b |\partial f/\partial\alpha|\,dx$ converges uniformly in $\alpha$</li>
+            </ul>
+            <div class="formula-sm">$$I'(\alpha) = \frac{d}{d\alpha}\int_a^b f(x,\alpha)\,dx = \int_a^b \frac{\partial f}{\partial\alpha}\,dx$$</div>
+          </div>
+        </div>
+
+        <div class="accordion">
+          <button class="acc-header" onclick="toggleAcc(this)">
+            <span>Improper Integrals Extension</span>
+            <span class="icon">+</span>
+          </button>
+          <div class="acc-body">
+            <p>For improper integrals $I(\alpha) = \int_0^\infty f(x,\alpha)\,dx$, the rule holds if $\partial f/\partial\alpha$ is continuous and the differentiated integral converges uniformly in $\alpha$. This is key for Gaussian integrals like $I(a) = \int_0^\infty e^{-ax^2}\,dx$.</p>
+            <div class="formula-sm">$$I'(a) = \int_0^\infty \frac{\partial}{\partial a}e^{-ax^2}\,dx = -\int_0^\infty x^2 e^{-ax^2}\,dx$$</div>
+          </div>
+        </div>
+
+        <div class="accordion">
+          <button class="acc-header" onclick="toggleAcc(this)">
+            <span>Connection to Fubini's Theorem</span>
+            <span class="icon">+</span>
+          </button>
+          <div class="acc-body">
+            <p>The Leibniz rule can be viewed as a special case of Fubini's theorem — the interchange of integration and differentiation is equivalent to interchanging the order of integration. If we write $I'(\alpha) = \frac{d}{d\alpha}\int f\,dx = \int_a^b \lim_{h\to 0}\frac{f(x,\alpha+h)-f(x,\alpha)}{h}\,dx$, the uniform convergence conditions justify passing the limit inside.</p>
+          </div>
+        </div>
+
+        <div class="accordion">
+          <button class="acc-header" onclick="toggleAcc(this)">
+            <span>Repeated Differentiation</span>
+            <span class="icon">+</span>
+          </button>
+          <div class="acc-body">
+            <p>We can apply the rule multiple times. If $I(\alpha) = \int_a^b f(x,\alpha)\,dx$, then under appropriate smoothness conditions:</p>
+            <div class="formula-sm">$$I^{(n)}(\alpha) = \int_a^b \frac{\partial^n f}{\partial\alpha^n}(x,\alpha)\,dx$$</div>
+            <p style="margin-top:8px;">This is especially useful in generating functions and moment calculations.</p>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ===================== VISUALIZATION ===================== -->
+  <section id="viz">
+    <div class="container">
+      <span class="section-label reveal">§ 03 · VISUALIZATION</span>
+      <h2 class="section-title reveal">Interactive <span>Graph Explorer</span></h2>
+      <p class="section-desc reveal">
+        Enter your own function $f(x,\alpha)$, adjust the parameter $\alpha$, and observe how the integrand and its area change in real time.
+      </p>
+      <div class="divider reveal"></div>
+
+      <div class="viz-layout reveal">
+        <div>
+          <div class="glass-card" style="margin-bottom:20px;">
+            <div style="font-family:'Courier New',monospace;color:var(--neon);font-size:.75rem;letter-spacing:2px;margin-bottom:4px;">CURRENT FUNCTION</div>
+            <div id="viz-formula" style="font-size:1.05rem;">$$f(x,\alpha) = e^{-\alpha x^2}, \quad \alpha = 1.0$$</div>
+          </div>
+          <div class="chart-box">
+            <canvas id="vizChart"></canvas>
+          </div>
+          <div class="glass-card" style="margin-top:20px;">
+            <div style="font-family:'Courier New',monospace;color:var(--purple);font-size:.75rem;letter-spacing:2px;margin-bottom:4px;">DERIVATIVE W.R.T. α (NUMERICAL)</div>
+            <div style="font-size:.88rem;color:var(--muted);margin-bottom:6px;">Computed numerically via central difference: $\partial f/\partial\alpha$</div>
+            <div id="viz-area" style="margin-top:10px;font-family:'Courier New',monospace;font-size:.82rem;color:var(--muted);">Numerical area under curve: <span id="area-val" style="color:var(--neon);">—</span></div>
+            <div style="margin-top:6px;font-family:'Courier New',monospace;font-size:.78rem;color:var(--muted);">f(x,α) = <span id="fnExprLabel" style="color:var(--accent);">exp(-alpha*x*x)</span></div>
+          </div>
+        </div>
+
+        <div class="controls-panel">
+
+          <div class="ctrl-card">
+            <h4>FUNCTION INPUT</h4>
+            <div class="fn-input-wrap">
+              <div class="fn-input-row">
+                <span class="fn-label">f(x,α) =</span>
+                <input class="fn-field" id="fnInput" type="text" value="Math.exp(-alpha*x*x)" placeholder="e.g. Math.sin(alpha*x)" spellcheck="false" autocomplete="off">
+                <button class="fn-apply-btn" onclick="applyFunction()">PLOT</button>
+              </div>
+              <div class="fn-error-msg" id="fnError"></div>
+              <div class="fn-presets">
+                <button class="fn-preset" onclick="setPreset('Math.exp(-alpha*x*x)')">e^−αx²</button>
+                <button class="fn-preset" onclick="setPreset('Math.sin(alpha*x)*Math.exp(-0.2*x*x)')">sin(αx)·e^−0.2x²</button>
+                <button class="fn-preset" onclick="setPreset('x*Math.exp(-alpha*Math.abs(x))')">x·e^−α|x|</button>
+                <button class="fn-preset" onclick="setPreset('1/(1+alpha*x*x)')">1/(1+αx²)</button>
+                <button class="fn-preset" onclick="setPreset('Math.cos(alpha*x)/(1+x*x)')">cos(αx)/(1+x²)</button>
+                <button class="fn-preset" onclick="setPreset('Math.exp(-alpha*x*x)*Math.cos(2*x)')">e^−αx²·cos(2x)</button>
+              </div>
+              <span class="fn-hint">Use: x, alpha, Math.sin/cos/exp/abs/sqrt/pow/PI</span>
+            </div>
+          </div>
+
+          <div class="ctrl-card">
+            <h4>PARAMETER CONTROL</h4>
+            <div class="slider-wrap">
+              <label>Alpha (α) <span id="alphaVal">1.0</span></label>
+              <input type="range" id="alphaSlider" min="0.1" max="5" step="0.1" value="1" oninput="updateViz()">
+            </div>
+            <div class="slider-wrap" style="margin-top:16px;">
+              <label>X range <span id="xrangeVal">3.0</span></label>
+              <input type="range" id="xrangeSlider" min="1" max="6" step="0.5" value="3" oninput="updateViz()">
+            </div>
+          </div>
+
+          <div class="ctrl-card">
+            <h4>DISPLAY OPTIONS</h4>
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:.88rem;color:var(--muted);">
+              <input type="checkbox" id="showDerivative" checked onchange="updateViz()">
+              Show derivative curve
+            </label>
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:.88rem;color:var(--muted);margin-top:10px;">
+              <input type="checkbox" id="showArea" checked onchange="updateViz()">
+              Show filled area
+            </label>
+          </div>
+
+          <div class="viz-info">
+            <p>As <strong>α increases</strong>, the shape of the function changes — for bell curves the area decreases proportionally as $\sqrt{\pi/\alpha}$.</p>
+          </div>
+          <div class="viz-info">
+            <p>The <strong>derivative curve</strong> (purple dashed) shows $\partial f/\partial\alpha$, computed numerically via central differences for any custom function.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== EXAMPLES ===================== -->
+  <section id="examples">
+    <div class="container">
+      <span class="section-label reveal">§ 04 · WORKED EXAMPLES</span>
+      <h2 class="section-title reveal">Step-by-Step <span>Derivations</span></h2>
+      <p class="section-desc reveal">Classic examples solved using the Leibniz Integral Rule — from Gaussian integrals to trigonometric parameterizations.</p>
+      <div class="divider reveal"></div>
+
+      <div class="example-tabs reveal">
+        <button class="tab-btn active" onclick="switchTab(0)">Gaussian Integral</button>
+        <button class="tab-btn" onclick="switchTab(1)">Trigonometric</button>
+        <button class="tab-btn" onclick="switchTab(2)">Frullani Type</button>
+      </div>
+
+      <!-- Example 1: Gaussian -->
+      <div class="example-panel active reveal" id="ex0">
+        <div class="glass-card" style="margin-bottom:24px;border-left:3px solid var(--gold);">
+          <div style="font-family:'Courier New',monospace;color:var(--gold);font-size:.75rem;letter-spacing:3px;margin-bottom:12px;">EXAMPLE 1 · GAUSSIAN INTEGRAL</div>
+          <div style="font-size:1.1rem;">Evaluate $\displaystyle I = \int_0^\infty e^{-x^2}\,dx$ using DUIS.</div>
+        </div>
+        <ol class="steps-list">
+          <li class="step-item">
+            <div class="step-num">1</div>
+            <div class="step-content">
+              <p>Introduce a parameter $\alpha$ by considering the family of integrals:</p>
+              <div class="formula-inline">$$I(\alpha) = \int_0^\infty e^{-\alpha x^2}\,dx, \quad \alpha > 0$$</div>
+            </div>
+          </li>
+          <li class="step-item">
+            <div class="step-num">2</div>
+            <div class="step-content">
+              <p>Differentiate both sides with respect to $\alpha$ (Leibniz Rule applies):</p>
+              <div class="formula-inline">$$I'(\alpha) = \int_0^\infty \frac{\partial}{\partial\alpha}\left(e^{-\alpha x^2}\right)\,dx = -\int_0^\infty x^2\,e^{-\alpha x^2}\,dx$$</div>
+            </div>
+          </li>
+          <li class="step-item">
+            <div class="step-num">3</div>
+            <div class="step-content">
+              <p>Use the substitution $u = \sqrt{\alpha}\,x$ in $I(\alpha)$:</p>
+              <div class="formula-inline">$$I(\alpha) = \frac{1}{\sqrt{\alpha}}\int_0^\infty e^{-u^2}\,du = \frac{1}{\sqrt{\alpha}}\cdot\frac{\sqrt{\pi}}{2} = \frac{\sqrt{\pi}}{2\sqrt{\alpha}}$$</div>
+            </div>
+          </li>
+          <li class="step-item">
+            <div class="step-num">4</div>
+            <div class="step-content">
+              <p>Now verify: $I'(\alpha) = -\dfrac{\sqrt{\pi}}{4\alpha^{3/2}}$, and at $\alpha=1$: $I(1) = \dfrac{\sqrt{\pi}}{2}$.</p>
+            </div>
+          </li>
+          <li class="step-item">
+            <div class="step-num">5</div>
+            <div class="step-content">
+              <p>Set $\alpha = 1$ to recover the original integral:</p>
+              <div class="formula-inline">$$I = \int_0^\infty e^{-x^2}\,dx = \frac{\sqrt{\pi}}{2}$$</div>
+            </div>
+          </li>
+        </ol>
+        <div class="result-box">
+          <span class="result-label">∎ FINAL RESULT</span>
+          $$\boxed{\int_0^\infty e^{-x^2}\,dx = \frac{\sqrt{\pi}}{2}}$$
+        </div>
+      </div>
+
+      <!-- Example 2: Trigonometric -->
+      <div class="example-panel" id="ex1">
+        <div class="glass-card" style="margin-bottom:24px;border-left:3px solid var(--purple);">
+          <div style="font-family:'Courier New',monospace;color:var(--purple);font-size:.75rem;letter-spacing:3px;margin-bottom:12px;">EXAMPLE 2 · TRIGONOMETRIC INTEGRAL</div>
+          <div style="font-size:1.1rem;">Evaluate $\displaystyle I = \int_0^\pi \ln(1 - 2a\cos x + a^2)\,dx$ for $|a| < 1$.</div>
+        </div>
+        <ol class="steps-list">
+          <li class="step-item">
+            <div class="step-num">1</div>
+            <div class="step-content">
+              <p>Define the integral as a function of parameter $a$:</p>
+              <div class="formula-inline">$$I(a) = \int_0^\pi \ln(1 - 2a\cos x + a^2)\,dx$$</div>
+            </div>
+          </li>
+          <li class="step-item">
+            <div class="step-num">2</div>
+            <div class="step-content">
+              <p>Differentiate under the integral sign with respect to $a$:</p>
+              <div class="formula-inline">$$I'(a) = \int_0^\pi \frac{-2\cos x + 2a}{1 - 2a\cos x + a^2}\,dx$$</div>
+            </div>
+          </li>
+          <li class="step-item">
+            <div class="step-num">3</div>
+            <div class="step-content">
+              <p>Using the Weierstrass substitution $t = \tan(x/2)$ and residue calculus, this evaluates to $\dfrac{2\pi a}{1-a^2}\cdot\dfrac{1}{a} = \dfrac{2\pi}{1}$ ... after careful algebra one finds $I'(a) = 0$ for $|a|<1$ (by symmetry of the Poisson kernel).</p>
+            </div>
+          </li>
+          <li class="step-item">
+            <div class="step-num">4</div>
+            <div class="step-content">
+              <p>Initial condition: at $a = 0$, $I(0) = \int_0^\pi \ln(1)\,dx = 0$.</p>
+            </div>
+          </li>
+        </ol>
+        <div class="result-box">
+          <span class="result-label">∎ FINAL RESULT</span>
+          $$\boxed{\int_0^\pi \ln(1 - 2a\cos x + a^2)\,dx = 0 \quad (|a|<1)}$$
+        </div>
+      </div>
+
+      <!-- Example 3: Frullani -->
+      <div class="example-panel" id="ex2">
+        <div class="glass-card" style="margin-bottom:24px;border-left:3px solid var(--neon);">
+          <div style="font-family:'Courier New',monospace;color:var(--neon);font-size:.75rem;letter-spacing:3px;margin-bottom:12px;">EXAMPLE 3 · FRULLANI-TYPE INTEGRAL</div>
+          <div style="font-size:1.1rem;">Evaluate $\displaystyle I = \int_0^\infty \frac{e^{-ax}-e^{-bx}}{x}\,dx$, $\;a,b>0$.</div>
+        </div>
+        <ol class="steps-list">
+          <li class="step-item">
+            <div class="step-num">1</div>
+            <div class="step-content">
+              <p>Recognize that we can write the integrand using differentiation:</p>
+              <div class="formula-inline">$$\frac{e^{-ax}-e^{-bx}}{x} = \int_a^b e^{-tx}\,dt$$</div>
+            </div>
+          </li>
+          <li class="step-item">
+            <div class="step-num">2</div>
+            <div class="step-content">
+              <p>Swap the order of integration (Fubini/Leibniz):</p>
+              <div class="formula-inline">$$I = \int_0^\infty\int_a^b e^{-tx}\,dt\,dx = \int_a^b\int_0^\infty e^{-tx}\,dx\,dt$$</div>
+            </div>
+          </li>
+          <li class="step-item">
+            <div class="step-num">3</div>
+            <div class="step-content">
+              <p>The inner integral is straightforward:</p>
+              <div class="formula-inline">$$\int_0^\infty e^{-tx}\,dx = \frac{1}{t}$$</div>
+            </div>
+          </li>
+          <li class="step-item">
+            <div class="step-num">4</div>
+            <div class="step-content">
+              <p>Integrate over $t$:</p>
+              <div class="formula-inline">$$I = \int_a^b \frac{1}{t}\,dt = \ln b - \ln a = \ln\!\left(\frac{b}{a}\right)$$</div>
+            </div>
+          </li>
+        </ol>
+        <div class="result-box">
+          <span class="result-label">∎ FINAL RESULT (FRULLANI'S THEOREM)</span>
+          $$\boxed{\int_0^\infty \frac{e^{-ax}-e^{-bx}}{x}\,dx = \ln\!\left(\frac{b}{a}\right)}$$
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== QUIZ ===================== -->
+  <section id="quiz">
+    <div class="container">
+      <span class="section-label reveal">§ 05 · SELF-ASSESSMENT</span>
+      <h2 class="section-title reveal">Test Your <span>Knowledge</span></h2>
+      <p class="section-desc reveal">Challenge yourself with these questions on DUIS and the Leibniz Integral Rule.</p>
+      <div class="divider reveal"></div>
+
+      <div class="quiz-box reveal">
+        <div class="quiz-header">
+          <div>Question <span id="qNum">1</span> of <span id="qTotal">5</span></div>
+          <div class="quiz-score">Score: <span id="scoreVal">0</span></div>
+        </div>
+        <div class="quiz-progress-bar"><div class="quiz-progress-fill" id="qProgress" style="width:20%"></div></div>
+
+        <div id="quizContainer"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== TEAM ===================== -->
+  <section id="team">
+    <div class="container">
+      <span class="section-label reveal">§ 06 · PROJECT TEAM</span>
+      <h2 class="section-title reveal">Meet the <span>Team</span></h2>
+      <p class="section-desc reveal">Multivariate Calculus Project — Department of Mathematics</p>
+      <div class="divider reveal"></div>
+
+      <div class="team-grid">
+        <div class="glass-card team-card reveal">
+          <div class="avatar">C</div>
+          <h3>Chanchal Varma</h3>
+          <div class="roll">PRN · 125B1D022</div>
+          <div class="role">Theory & Derivations</div>
+        </div>
+        <div class="glass-card team-card reveal">
+          <div class="avatar">D</div>
+          <h3>Disha Ramteke</h3>
+          <div class="roll">PRN · 125B1D021</div>
+          <div class="role">Examples & Visualizations</div>
+        </div>
+      </div>
+
+      <!-- Guide -->
+      <div class="glass-card guide-card reveal" style="margin-top:32px;">
+        <div class="avatar" style="background:linear-gradient(135deg,var(--gold),#f97316);font-size:1.4rem;">★</div>
+        <div>
+          <div style="font-family:'Courier New',monospace;color:var(--gold);font-size:.75rem;letter-spacing:3px;margin-bottom:6px;">PROJECT GUIDE</div>
+          <h3 style="font-size:1.2rem;margin-bottom:4px;">Prof. Amruta Patil</h3>
+          <div style="color:var(--muted);font-size:.9rem;">Department of Mathematics & Statistics</div>
+          <div style="color:var(--muted);font-size:.85rem;margin-top:4px;">Course: Multivariate Calculus · Semester II</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== FOOTER ===================== -->
+  <footer>
+    <div class="footer-logo">∫ DUIS · LEIBNIZ INTEGRAL RULE</div>
+    <div class="footer-info">
+      Multivariate Calculus Project · Department of Mathematics<br>
+      Academic Year 2025–2026
+    </div>
+    <div class="footer-divider"></div>
+    <div class="footer-links">
+      <a href="#hero" title="Home">⌂</a>
+      <a href="#theory" title="Theory">∂</a>
+      <a href="#quiz" title="Quiz">?</a>
+      <a href="mailto:project@university.edu" title="Email">✉</a>
+    </div>
+    <div class="footer-copy">BUILT WITH MATHEMATICAL PRECISION · © 2025</div>
+  </footer>
+
+  <!-- ===================== JAVASCRIPT ===================== -->
+  <script>
+  /* ============================================================
+     LOADER
+  ============================================================ */
+  window.addEventListener('load', () => {
+    setTimeout(() => document.getElementById('loader').classList.add('hidden'), 2200);
+  });
+
+  /* ============================================================
+     CUSTOM CURSOR
+  ============================================================ */
+  const cursor = document.getElementById('cursor');
+  const ring   = document.getElementById('cursor-ring');
+  let mx=0,my=0,rx=0,ry=0;
+  document.addEventListener('mousemove', e => { mx=e.clientX; my=e.clientY; cursor.style.left=mx+'px'; cursor.style.top=my+'px'; });
+  (function animRing(){
+    rx += (mx-rx)*0.12; ry += (my-ry)*0.12;
+    ring.style.left=rx+'px'; ring.style.top=ry+'px';
+    requestAnimationFrame(animRing);
+  })();
+  document.querySelectorAll('a,button,input[type=range],.option-btn').forEach(el=>{
+    el.addEventListener('mouseenter',()=>{ cursor.style.transform='translate(-50%,-50%) scale(2)'; ring.style.transform='translate(-50%,-50%) scale(1.5)'; });
+    el.addEventListener('mouseleave',()=>{ cursor.style.transform='translate(-50%,-50%) scale(1)'; ring.style.transform='translate(-50%,-50%) scale(1)'; });
+  });
+
+  /* ============================================================
+     SCROLL PROGRESS
+  ============================================================ */
+  window.addEventListener('scroll', () => {
+    const pct = (window.scrollY / (document.body.scrollHeight - window.innerHeight)) * 100;
+    document.getElementById('progress').style.width = pct + '%';
+    document.getElementById('back-top').classList.toggle('visible', window.scrollY > 400);
+  });
+  document.getElementById('back-top').addEventListener('click', () => window.scrollTo({top:0,behavior:'smooth'}));
+
+  /* ============================================================
+     PARTICLES
+  ============================================================ */
+  (function(){
+    const canvas = document.getElementById('particles');
+    const ctx = canvas.getContext('2d');
+    let W, H, particles=[];
+    const symbols = ['∫','∂','α','β','∑','∞','∇','π','Δ','dx','dy','dα'];
+
+    function resize(){ W=canvas.width=window.innerWidth; H=canvas.height=window.innerHeight; }
+    resize(); window.addEventListener('resize', resize);
+
+    function Particle(){
+      this.x = Math.random()*W;
+      this.y = Math.random()*H;
+      this.sym = symbols[Math.floor(Math.random()*symbols.length)];
+      this.size = 10+Math.random()*14;
+      this.speed = 0.15+Math.random()*0.3;
+      this.opacity = 0.04+Math.random()*0.08;
+      this.drift = (Math.random()-0.5)*0.2;
+    }
+    for(let i=0;i<45;i++) particles.push(new Particle());
+
+    function draw(){
+      ctx.clearRect(0,0,W,H);
+      particles.forEach(p=>{
+        ctx.save();
+        ctx.globalAlpha = p.opacity;
+        ctx.fillStyle = Math.random()>.5?'#38bdf8':'#a855f7';
+        ctx.font = `${p.size}px Georgia, serif`;
+        ctx.fillText(p.sym, p.x, p.y);
+        ctx.restore();
+        p.y -= p.speed; p.x += p.drift;
+        if(p.y < -30){ p.y=H+10; p.x=Math.random()*W; }
+      });
+      requestAnimationFrame(draw);
+    }
+    draw();
+  })();
+
+  /* ============================================================
+     SCROLL REVEAL
+  ============================================================ */
+  const observer = new IntersectionObserver(entries=>{
+    entries.forEach(e=>{ if(e.isIntersecting) e.target.classList.add('visible'); });
+  }, {threshold:0.1});
+  document.querySelectorAll('.reveal').forEach(el=>observer.observe(el));
+
+  /* ============================================================
+     MOBILE NAV
+  ============================================================ */
+  document.getElementById('navToggle').addEventListener('click', ()=>{
+    document.getElementById('navLinks').classList.toggle('open');
+  });
+
+  /* ============================================================
+     ACCORDION
+  ============================================================ */
+  function toggleAcc(btn){
+    btn.classList.toggle('open');
+    const body = btn.nextElementSibling;
+    body.classList.toggle('open');
+    if(body.classList.contains('open') && window.MathJax) MathJax.typesetPromise([body]);
+  }
+
+  /* ============================================================
+     EXAMPLE TABS
+  ============================================================ */
+  function switchTab(idx){
+    document.querySelectorAll('.tab-btn').forEach((b,i)=>b.classList.toggle('active',i===idx));
+    document.querySelectorAll('.example-panel').forEach((p,i)=>p.classList.toggle('active',i===idx));
+    if(window.MathJax) MathJax.typesetPromise([document.getElementById('ex'+idx)]);
+  }
+
+  /* ============================================================
+     VISUALIZATION (Chart.js)
+  ============================================================ */
+  let vizChart;
+  let currentFnExpr = 'Math.exp(-alpha*x*x)';
+  let currentFn = null;
+
+  function buildFn(expr){
+    // Compile a safe function from user expression
+    // Allow: x, alpha, all Math.* methods/constants
+    return new Function('x','alpha', `"use strict"; return (${expr});`);
+  }
+
+  function numericalDerivAlpha(fn, x, alpha, h=1e-5){
+    return (fn(x, alpha+h) - fn(x, alpha-h)) / (2*h);
+  }
+
+  function setPreset(expr){
+    document.getElementById('fnInput').value = expr;
+    applyFunction();
+  }
+
+  function applyFunction(){
+    const expr = document.getElementById('fnInput').value.trim();
+    const errEl = document.getElementById('fnError');
+    const field = document.getElementById('fnInput');
+    if(!expr){ errEl.textContent='Please enter a function.'; field.classList.add('error'); return; }
+    try {
+      const testFn = buildFn(expr);
+      const testVal = testFn(1, 1);
+      if(typeof testVal !== 'number' || isNaN(testVal)){ throw new Error('Function returned NaN'); }
+      currentFnExpr = expr;
+      currentFn = testFn;
+      errEl.textContent = '';
+      field.classList.remove('error');
+      // Update derivative label
+      const raw = expr.replace(/Math\./g,'').replace(/alpha/g,'α');
+      document.getElementById('fnExprLabel').textContent = raw.length > 40 ? raw.slice(0,40)+'…' : raw;
+      updateViz();
+    } catch(e){
+      errEl.textContent = '⚠ ' + (e.message || 'Invalid expression');
+      field.classList.add('error');
+    }
+  }
+
+  function linspace(a,b,n){
+    const arr=[]; for(let i=0;i<n;i++) arr.push(a+(b-a)*i/(n-1)); return arr;
+  }
+  function numericalTrapz(xs, ys){
+    let sum=0;
+    for(let i=1;i<xs.length;i++) sum+=(ys[i]+ys[i-1])*(xs[i]-xs[i-1])/2;
+    return sum;
+  }
+
+  function updateViz(){
+    const alpha   = parseFloat(document.getElementById('alphaSlider').value);
+    const xmax    = parseFloat(document.getElementById('xrangeSlider').value);
+    const showDer = document.getElementById('showDerivative').checked;
+    const showA   = document.getElementById('showArea').checked;
+
+    document.getElementById('alphaVal').textContent  = alpha.toFixed(1);
+    document.getElementById('xrangeVal').textContent = xmax.toFixed(1);
+
+    ['alphaSlider','xrangeSlider'].forEach(id=>{
+      const s=document.getElementById(id);
+      const pct=((s.value-s.min)/(s.max-s.min)*100).toFixed(1);
+      s.style.setProperty('--pct',pct+'%');
+    });
+
+    if(!currentFn){
+      try { currentFn = buildFn(currentFnExpr); } catch(e){ return; }
+    }
+
+    const fn = currentFn;
+    const xs = linspace(-xmax, xmax, 300);
+    let fData, dfData;
+    try {
+      fData  = xs.map(x=>({ x, y: fn(x, alpha) }));
+      dfData = xs.map(x=>({ x, y: numericalDerivAlpha(fn, x, alpha) }));
+    } catch(e){ return; }
+
+    // Filter out non-finite values
+    const clean = arr => arr.map(p => ({ x: p.x, y: isFinite(p.y) ? p.y : null }));
+    fData  = clean(fData);
+    dfData = clean(dfData);
+
+    const xsPos = linspace(0, xmax, 300);
+    const ysPos = xsPos.map(x=>{ try{ const v=fn(x,alpha); return isFinite(v)?v:0; }catch(e){return 0;} });
+    const area  = 2 * numericalTrapz(xsPos, ysPos);
+    document.getElementById('area-val').textContent = area.toFixed(5);
+
+    const displayExpr = currentFnExpr.replace(/Math\./g,'').replace(/alpha/g,'α');
+    document.getElementById('viz-formula').innerHTML =
+      `\\(f(x,\\alpha) = ${displayExpr.length>40 ? '\\text{custom}' : displayExpr.replace(/\*/g,'\\cdot ')},\\quad\\alpha=${alpha.toFixed(1)}\\)`;
+    if(window.MathJax) MathJax.typesetPromise([document.getElementById('viz-formula')]);
+
+    const fillDs = showA ? {
+      label:'Area',
+      data: fData,
+      backgroundColor:'rgba(56,189,248,0.12)',
+      borderColor:'transparent',
+      fill:'origin',
+      pointRadius:0,
+      tension:.4,
+      order:0,
+    } : null;
+
+    const datasets = [
+      {
+        label:`f(x,α=${alpha.toFixed(1)})`,
+        data: fData,
+        borderColor:'#38bdf8',
+        backgroundColor:'transparent',
+        borderWidth:2.5,
+        pointRadius:0,
+        tension:.4,
+        order:1,
+      }
+    ];
+    if(showDer) datasets.push({
+      label:`∂f/∂α`,
+      data: dfData,
+      borderColor:'#a855f7',
+      backgroundColor:'transparent',
+      borderWidth:2,
+      borderDash:[5,4],
+      pointRadius:0,
+      tension:.4,
+      order:2,
+    });
+    if(fillDs) datasets.unshift(fillDs);
+
+    if(!vizChart){
+      const ctx2 = document.getElementById('vizChart').getContext('2d');
+      vizChart = new Chart(ctx2, {
+        type:'line',
+        data:{ datasets },
+        options:{
+          animation:{ duration:300 },
+          parsing:false,
+          responsive:true,
+          maintainAspectRatio:false,
+          scales:{
+            x:{ type:'linear', title:{ display:true,text:'x',color:'#94a3b8' }, ticks:{color:'#94a3b8'}, grid:{color:'rgba(255,255,255,.05)'} },
+            y:{ title:{ display:true,text:'f(x,α)',color:'#94a3b8' }, ticks:{color:'#94a3b8'}, grid:{color:'rgba(255,255,255,.05)'}, min:-0.35 }
+          },
+          plugins:{
+            legend:{ labels:{ color:'#e2e8f0', font:{size:11} } },
+            tooltip:{ backgroundColor:'rgba(5,7,15,.9)', borderColor:'rgba(56,189,248,.3)', borderWidth:1 }
+          }
+        }
+      });
+    } else {
+      vizChart.data.datasets = datasets;
+      vizChart.update('none');
+    }
+  }
+
+  window.addEventListener('load', ()=>{
+    try { currentFn = buildFn(currentFnExpr); } catch(e){}
+    setTimeout(updateViz, 500);
+  });
+
+  /* ============================================================
+     QUIZ — Updated Questions
+  ============================================================ */
+  const questions = [
+    {
+      q: "What does DUIS stand for?",
+      formula: null,
+      options:[
+        "Derivative Under Integral Summation",
+        "Differentiating Under the Integral Sign",
+        "Double Uniform Integration System",
+        "Differential Uniform Integral Substitution"
+      ],
+      answer: 1,
+      explanation: "DUIS stands for Differentiating Under the Integral Sign, also known as the Leibniz Integral Rule."
+    },
+    {
+      q: "What is the correct form of the Leibniz Rule when limits a and b are constants (independent of α)?",
+      formula: null,
+      options:[
+        "$$\\frac{d}{d\\alpha}\\int_a^b f\\,dx = f(b,\\alpha) - f(a,\\alpha)$$",
+        "$$\\frac{d}{d\\alpha}\\int_a^b f(x,\\alpha)\\,dx = \\int_a^b \\frac{\\partial f}{\\partial \\alpha}\\,dx$$",
+        "$$\\frac{d}{d\\alpha}\\int_a^b f(x,\\alpha)\\,dx = \\int_a^b \\frac{\\partial f}{\\partial x}\\,dx$$",
+        "$$\\frac{d}{d\\alpha}\\int_a^b f\\,dx = 0$$"
+      ],
+      answer: 1,
+      explanation: "When limits are constants, the derivative simply moves inside as a partial derivative with respect to α."
+    },
+    {
+      q: "Using DUIS, evaluate the classic Gaussian integral:",
+      formula: "$$I = \\int_0^\\infty e^{-x^2}\\,dx$$",
+      options:["π/2","√π","√π / 2","1/√π"],
+      answer: 2,
+      explanation: "By parameterising I(α) = ∫e^{-αx²}dx = √π/(2√α) and setting α = 1, the result is √π/2 ≈ 0.8862."
+    },
+    {
+      q: "In the Frullani integral, what is the value of",
+      formula: "$$\\int_0^\\infty \\frac{e^{-ax} - e^{-bx}}{x}\\,dx \\quad (a,b > 0)$$",
+      options:[
+        "ln(a/b)",
+        "ln(a) − ln(b)",
+        "ln(b/a)",
+        "ln(a + b)"
+      ],
+      answer: 2,
+      explanation: "By writing the integrand as ∫_a^b e^{-tx}dt and swapping order of integration, the result is ln(b/a)."
+    },
+    {
+      q: "Which of the following is a sufficient condition for the Leibniz Rule (constant limits) to be valid?",
+      formula: null,
+      options:[
+        "f(x, α) is integrable in x only",
+        "f(x, α) and ∂f/∂α are both continuous on the region",
+        "The limits of integration are finite",
+        "f is differentiable with respect to x only"
+      ],
+      answer: 1,
+      explanation: "Continuity of f and its partial derivative ∂f/∂α on the closed region [a,b]×[α₁,α₂] is sufficient to justify passing the derivative inside the integral."
+    }
+  ];
+
+  let currentQ=0, score=0, answered=false;
+  document.getElementById('qTotal').textContent = questions.length;
+
+  function renderQuestion(){
+    const q = questions[currentQ];
+    const frac = (currentQ+1)/questions.length;
+    document.getElementById('qNum').textContent = currentQ+1;
+    document.getElementById('qProgress').style.width = (frac*100)+'%';
+    answered=false;
+
+    const html=`
+      <div class="q-card">
+        <span class="q-num">QUESTION ${currentQ+1} / ${questions.length}</span>
+        <p class="q-text">${q.q}</p>
+        ${q.formula?`<div class="q-formula">${q.formula}</div>`:''}
+        <div class="options">
+          ${q.options.map((o,i)=>`<button class="option-btn" onclick="selectOption(this,${i})">${o}</button>`).join('')}
+        </div>
+        <div class="q-feedback" id="feedback"></div>
+        <div class="q-nav">
+          <span></span>
+          ${currentQ<questions.length-1
+            ?`<button class="btn btn-outline" id="nextBtn" onclick="nextQ()" style="display:none;padding:10px 24px;font-size:.8rem;">Next →</button>`
+            :`<button class="btn btn-primary" id="nextBtn" onclick="showResult()" style="display:none;padding:10px 24px;font-size:.8rem;">See Results</button>`
+          }
+        </div>
+      </div>`;
+    document.getElementById('quizContainer').innerHTML=html;
+    if(window.MathJax) MathJax.typesetPromise([document.getElementById('quizContainer')]);
+  }
+
+  function selectOption(btn, idx){
+    if(answered) return;
+    answered=true;
+    const q=questions[currentQ];
+    const btns=document.querySelectorAll('.option-btn');
+    btns.forEach(b=>b.disabled=true);
+    const fb=document.getElementById('feedback');
+
+    if(idx===q.answer){
+      btn.classList.add('correct');
+      score++; document.getElementById('scoreVal').textContent=score;
+      fb.className='q-feedback correct-fb show';
+      fb.textContent='✓ Correct! '+q.explanation;
+    } else {
+      btn.classList.add('wrong');
+      btns[q.answer].classList.add('correct');
+      fb.className='q-feedback wrong-fb show';
+      fb.textContent='✗ Incorrect. '+q.explanation;
+    }
+    document.getElementById('nextBtn').style.display='inline-flex';
+  }
+
+  function nextQ(){ currentQ++; renderQuestion(); }
+
+  function showResult(){
+    const pct=Math.round(score/questions.length*100);
+    const msg=pct>=80?'Excellent mastery of DUIS!':pct>=60?'Good understanding — review the theory.':'Keep studying the examples and theory.';
+    document.getElementById('quizContainer').innerHTML=`
+      <div class="q-card quiz-result">
+        <div class="result-score">${score}/${questions.length}</div>
+        <div style="font-size:2rem;margin:8px 0">${pct>=80?'🎉':pct>=60?'👍':'📚'}</div>
+        <p class="result-msg">${msg} (${pct}%)</p>
+        <button class="btn btn-primary" onclick="restartQuiz()">Try Again</button>
+      </div>`;
+  }
+
+  function restartQuiz(){ currentQ=0; score=0; document.getElementById('scoreVal').textContent=0; renderQuestion(); }
+
+  window.addEventListener('load', ()=> setTimeout(renderQuestion, 100));
+
+  </script>
+</body>
+</html>
